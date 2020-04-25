@@ -15,6 +15,8 @@ import os
 import censusdata
 import pandas as pd
 
+from generate_households import generate_households
+
 import cenpy
 
 os.chdir('/Users/mikehoefer/Documents/courses/mult-agent-sys/project/python')
@@ -49,6 +51,7 @@ class Location(object):
         self.num_employees_target = num_employees_target
         self.is_public = is_public
         self.num_employees = 0
+        self.is_closed = False
         
         #self.interaction_matrix # could be day by day
     
@@ -214,10 +217,10 @@ def update_agent_status(infection_percent):
 ####
 # CENSUS UTILITY FUNCTIONS
 ####
-def get_county_and_state_id(county = 'Boulder County', state = 'Colorado'):
+def get_county_and_state_id(county, state):
     state_id = ""
     county_id = ""
-    geographical = censusdata.download('acs1', 2018, censusdata.censusgeo([('county', '*')]),['ANRC'])
+    geographical = censusdata.download('acs5', 2018, censusdata.censusgeo([('county', '*')]),['ANRC'])
     
     # Newport County, Rhode Island: Summary level: 050, state:44> county:005
     for index, row in geographical.iterrows():
@@ -251,10 +254,10 @@ def pull_business_data(county_id, state_id):
     return df
 
 
-# Turns the pandas dataframe into a list of Location objects
-# Max business size is necessary bc the census doesn't have a category
+# creates synthetic businesses from the census dataframe
+    # Max business size is necessary bc the census doesn't have a category
     # for businesses with more than 1k people...
-def create_business_objects(df, max_business_size = 2000, capacity=100):
+def create_business_df (df, max_business_size = 2000, capacity=100):
     # business size lookup dict (size range)
     business_sizes = {'210' : (1, 4),
                       '220' : (5, 9),
@@ -278,9 +281,10 @@ def create_business_objects(df, max_business_size = 2000, capacity=100):
     
     # go through and construct the list of businesses 
     
-    new_locations = []
+    new_locations = []  # list of dicts to be turned into a DF
     counter = 0
     curr_type = ''
+    
     for i, row in df.iterrows():
         
         # skip aggregated categories and categories representing all business sectors
@@ -292,17 +296,36 @@ def create_business_objects(df, max_business_size = 2000, capacity=100):
                 curr_type = row['NAICS2017_LABEL']
                 counter = 0
             # make one location per ESTAB
+            
             for j in range(int(row['ESTAB'])):
-                new_loc = Location(row['NAICS2017_LABEL'] + '_' + str(counter),     # business name
-                                   row['NAICS2017_LABEL'],                          # category
-                                   [k for k in range(24)],                          # open all hours of the day
-                                   capacity,                                        # set capacity for now
-                                   row['NAICS2017'] in public_types,                # if business is open to public
-                                   random.randint(business_sizes[row['EMPSZES']][0], business_sizes[row['EMPSZES']][1]))  # num employees
-                new_locations.append(new_loc)
+                curr_bus = {}
+                curr_bus['business_id'] = row['NAICS2017_LABEL'] + '_' + str(counter)
+                curr_bus['category'] = row['NAICS2017_LABEL']
+                curr_bus['hours'] = [k for k in range(24)]
+                curr_bus['capacity'] = capacity
+                curr_bus['is_public'] = row['NAICS2017'] in public_types
+                curr_bus['target_num_employees'] = random.randint(business_sizes[row['EMPSZES']][0], business_sizes[row['EMPSZES']][1])
+                
+                new_locations.append(curr_bus)
                 counter += 1 
                 
-    return new_locations
+    return pd.DataFrame(new_locations)
+
+# turns the synthetic business df into a list of objects
+def create_business_objects(df):
+    new_locs = []
+    
+    for i, row in df.iterrows():
+        new_loc = Location(row['business_id'],     # business name
+                           row['category'],                          # category
+                           row['hours'],                          # open all hours of the day
+                           row['capacity'],                                        # set capacity for now
+                           row['is_public'],                # if business is open to public
+                           row['target_num_employees'])  # num employees
+        
+        new_locs.append(new_loc)
+        
+    return new_locs
 
 
 # quick check to see how many employees there should be
@@ -334,6 +357,15 @@ def calc_business_qtys(list_o_bus):
 # AGENT FUNCTIONS
 ####
     
+# pulls data from US census to generate list of agents
+def create_agent_df(county_id, state_id):
+    # Sky code here
+    df = generate_households(county_id, state_id)
+    
+    return df
+
+
+
 # takes Pandas DF and creates a list of agents
 # this also constructs household locations!
 # returns two lists: agent objects, and household (Location) objects
@@ -391,7 +423,7 @@ def get_number_of_workers(list_o_agents, working_age = 18):
 ###
 # ASSIGNMENT OF AGENTS TO BUSINESSES
 ###
-def assign_agents_to_bus(agents, businesses, working_age = 18):
+def assign_agents_to_bus(agents, businesses, working_age = 18, retirement_age=70):
     # rather than randomly assign individuals to businesses
     # which would represent more of a "fully mixed" model,
     # we seek to effectively simulate localized clustering
@@ -414,7 +446,7 @@ def assign_agents_to_bus(agents, businesses, working_age = 18):
     jobs_left = True
     
     for agent in agents:
-        if agent.age >= working_age:
+        if agent.age >= working_age and agent.age <= retirement_age:
             # we have a worker!
             
             # if no jobs left, they work at home
@@ -444,14 +476,23 @@ def assign_agents_to_bus(agents, businesses, working_age = 18):
 #### FUNCTIONS TO RUN THE SIMULATION
 ##############################################
 
-county = "Boulder County"
-state = "Colorado"
+county = "Summit County"
+state = "Utah"
 
 county_id, state_id = get_county_and_state_id(county, state)
 
 
 # CREATE BUSINESSES
-bus_locs_df = pull_business_data(county_id, state_id)
+
+# aggregated frame
+bus_agg_df = pull_business_data(county_id, state_id)
+
+# make synthetic frame
+bus_locs_df = create_business_df(bus_agg_df)
+
+# save synthetic businesses for simulation repeatability
+bus_locs_df.to_csv("synthetic_business_locations.csv")
+
 bus_locs = create_business_objects(bus_locs_df)
 
 
@@ -464,7 +505,17 @@ print ("We have", count, "jobs available.")
 
 
 # CREATE AGENTS and HOUSEHOLDS
-raw_agents = pd.read_csv('agents.csv')
+
+#raw_agents = pd.read_csv('agents.csv')
+
+
+# takes some time - use debug=True for verbose
+raw_agents = create_agent_df(county_id, state_id)
+
+
+# save off agent CSV for future use
+raw_agents.to_csv('agent_df_summit.csv')
+
 agents, households = build_agent_objects(raw_agents)
 
 
@@ -473,7 +524,7 @@ workers, non_workers = get_number_of_workers(agents, working_age = 18)
 
 
 # assign agents to businesses
-assign_agents_to_bus(agents, bus_locs, 18)
+assign_agents_to_bus(agents, bus_locs, 18, 70)
 
 
 locations = bus_locs + households
@@ -483,7 +534,7 @@ locations = bus_locs + households
 
 # randomly infect one person
 
-num_initially_infected = 1
+num_initially_infected = 10
 
 for i in range (num_initially_infected):
     random.choice(agents).is_infected = True
@@ -508,7 +559,13 @@ for i in range(num_days):
         
 
 
-# run the simulation - CUSTOMER SCHEDULER
+
+
+
+### OLD - IGNORE FOR NOW ####
+
+
+# run the simulation - CUSTOM SCHEDULER --> SLOW 
 for i in range(num_days):
     
     # generate every agent's schedule
@@ -535,9 +592,6 @@ for i in range(num_days):
         
 
 
-
-
-
 ##############################################
 #### EXPERIMENTING WITH SIMULATION RUNS
 ##############################################
@@ -545,6 +599,30 @@ for i in range(num_days):
     # Coming soon
     
     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##############################################
+#### OLD
+##############################################
+
+
 
 # CENSUS scratching
 import cenpy
