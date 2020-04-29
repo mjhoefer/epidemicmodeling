@@ -1,25 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Fri Apr  3 14:41:31 2020
 
-@author: mikehoefer
-"""
 
 import random
-
+import numpy as np
 import requests
-
-import os
-
+import matplotlib.pyplot as plt
 import censusdata
 import pandas as pd
-
 from generate_households import generate_households
 
-import cenpy
 
-os.chdir('/Users/mikehoefer/Documents/courses/mult-agent-sys/project/python')
 
 # each day composed of 24 hours
 
@@ -103,9 +94,12 @@ class Agent(object):
         
         # using booleans for the SIR states to make processing faster
         self.is_infected = False
+        self.is_symptomatic = False
         self.is_immune = False
         self.is_recovered = False
         
+        self.days_incubation = -1
+        self.days_symptomatic = -1
         
         self.current_location = home
         self.current_location.current_tenants.append(self)
@@ -190,21 +184,60 @@ def universal_scheduler_sim(agents, locations, infection_percent = 0.01):
         # see who gets infected for each hour of the day
         update_agent_status(infection_percent)
     
+    for agent in agents:
+        if agent.is_infected:
+            # decrease days left in incubation
+            if agent.days_incubation > 0:
+                agent.days_incubation -= 1
+            # decrease days left in symptoms  
+            elif agent.days_symptomatic > 0 and agent.days_incubation <= 0:
+                agent.is_symptomatic = True
+                agent.days_symptomatic -= 1
+            # if done with both periods then recover
+            elif agent.days_incubation <= 0 and  agent.days_symptomatic <= 0:
+                agent.is_infected = False
+                agent.is_immune = True
+                agent.is_recovered = True
+                agent.is_symptomatic = False
+                agent.days_incubation = -1
+                agent.days_symptomatic = -1
+                global total_recovered
+                total_recovered += 1
+                global total_infected
+                total_infected -= 1
+
+
+
 
 # simple code that checks each agent's location, and flips a coin to see if 
 # they become infected (there must be an infected person in the location)
-def update_agent_status(infection_percent):
+def update_agent_status(infection_percent, incubation_period = 7, symptomatic_period = 7):
     # location mixing logic
     #for location in locations:
     #    location.get_people_interactions()
-    
     
     for agent in agents:
         # infection logic
         # TODO more intelligence needed here
         if agent.current_location.has_infected_person():
-            if random.random() < infection_percent:
+            if random.random() < infection_percent and not agent.is_immune and not agent.is_infected:
                 agent.is_infected = True
+                
+                # Update globals
+                global total_infected
+                total_infected += 1
+                global total_unexposed
+                total_unexposed -= 1
+                
+                # Draw how many days they will indure illness
+                agent.days_incubation = np.random.normal(incubation_period, 5)
+                agent.days_symptomatic = np.random.normal(symptomatic_period, 5)
+                
+                if agent.days_incubation > 20:
+                    agent.days_incubation = 20
+                if agent.days_symptomatic > 20:
+                    agent.days_symptomatic = 20
+            
 
     return
 
@@ -506,15 +539,13 @@ print ("We have", count, "jobs available.")
 
 # CREATE AGENTS and HOUSEHOLDS
 
-#raw_agents = pd.read_csv('agents.csv')
+try: 
+    raw_agents = pd.read_csv('agents_'+county_id+'_'+state_id+'.csv')
+    
+except:
+    # takes some time - use debug=True for verbose
+    raw_agents = create_agent_df(county_id, state_id)
 
-
-# takes some time - use debug=True for verbose
-raw_agents = create_agent_df(county_id, state_id)
-
-
-# save off agent CSV for future use
-raw_agents.to_csv('agent_df_summit.csv')
 
 agents, households = build_agent_objects(raw_agents)
 
@@ -533,463 +564,85 @@ locations = bus_locs + households
 
 
 # randomly infect one person
+total_infected = 0
+total_unexposed = len(agents)
+total_recovered = 0
+print("Initializing Variables")
 
-num_initially_infected = 10
 
-for i in range (num_initially_infected):
-    random.choice(agents).is_infected = True
+initial_infected = 10
+
+for i in range (initial_infected):
+    agent =  random.choice(agents)
+    agent.is_infected = True
+                
+    # Update globals
+    total_infected += 1
+    total_unexposed -= 1
+    
+    # Draw how many days they will indure illness
+    agent.days_incubation = np.random.normal(7, 1)
+    agent.days_symptomatic = np.random.normal(7, 1)
+    
+    if agent.days_incubation > 20:
+        agent.days_incubation = 20
+    if agent.days_symptomatic > 20:
+        agent.days_symptomatic = 20
 
 # percent chance of being infected if you are at a location with an infected person
 chance_of_infection = .01
 
-num_days = 5
+num_days = 15
 
 
 num_agents = len(agents)
 
+days = []
+infection_days = []
+recovered_days = []
+unexposed_days = []
+
+i = 0
 
 # run the simulation - UNIVERSAL SCHEDULER
-for i in range(num_days):
+while total_infected > 0:
     
     universal_scheduler_sim(agents, locations)
         
     # print stats
-    num_infected = len([agent for agent in agents if agent.is_infected])
-    print("After day", i, "there are", num_infected, "infected out of ", num_agents)
+    
+    print("After day", i, "there are", total_infected, "infected out of ", num_agents)
         
+    days.append(i)
 
-
-
-
-
-### OLD - IGNORE FOR NOW ####
-
-
-# run the simulation - CUSTOM SCHEDULER --> SLOW 
-for i in range(num_days):
+    infection_days.append(total_infected)
+    unexposed_days.append(total_unexposed)
+    recovered_days.append(total_recovered)
     
-    # generate every agent's schedule
-    for k, agent in enumerate(agents):
-        agent.generate_daily_schedule(False)
-        if k % 1000 == 0:
-            print("generated", k, "schedules out of", num_agents)
-        
-    print("Done generating schedules for day", i)
-    
-    for j in range(23):
-        # update agent location
-        for agent in agents:
-            agent.update_location(j)
-            
-        # run infection logic
-        update_agent_status(chance_of_infection)
-        
-        
-    # print stats
-    num_infected = len([agent for agent in agents if agent.infection_status == 'infected'])
-    num_susceptible = len([agent for agent in agents if agent.infection_status == 'susceptible'])
-    print("After day", i, "there are", num_infected, "infected out of ", num_infected + num_susceptible)
-        
+    i += 1
+
+    if i%5 == 0:
+        plt.plot(days, infection_days)
+        plt.plot(days, recovered_days)
+        plt.plot(days, unexposed_days)
+        plt.title("Simulation Infection")
+        plt.xlabel("# Day")
+        plt.ylabel("# Agents")
+        plt.legend(["Infected","Recovered","Not Exposed"])
+        plt.show()
 
 
-##############################################
-#### EXPERIMENTING WITH SIMULATION RUNS
-##############################################
+plt.plot(days, infection_days)
+plt.plot(days, recovered_days)
+plt.plot(days, unexposed_days)
+plt.title("Simulation Infection")
+plt.xlabel("# Day")
+plt.ylabel("# Agents")
+plt.legend(["Infected","Recovered","Not Exposed"])
+plt.show() 
+   
 
-    # Coming soon
-    
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-##############################################
-#### OLD
-##############################################
-
-
-
-# CENSUS scratching
-import cenpy
-County = "Boulder County"
-State = "Colorado"
-
-state_id = ""
-county_id = ""
-geographical = censusdata.download('acs1', 2018, censusdata.censusgeo([('county', '*')]),['ANRC'])
-
-# Newport County, Rhode Island: Summary level: 050, state:44> county:005
-for index, row in geographical.iterrows():
-    
-    if str(index).split(",")[1].split(":")[0][1:] == State and str(index).split(",")[0]==County:
-        county_id = str(index)[-3:]
-        state_id = str(index)[-14:-12]
-        break
-    
-    
-print("State ID:", state_id, "\nCounty ID:", county_id)    
-
-
-
-GenderAgeRaw = censusdata.download('acs1', 2018, censusdata.censusgeo([('state',str(state_id)),('county', str(county_id))]),
-                                 ["B01001_001E",
-                                  "B01001_002E",
-                                  "B01001_003E",
-                                  "B01001_004E",
-                                  "B01001_005E",
-                                  "B01001_006E",
-                                  "B01001_007E",
-                                  "B01001_008E",
-                                  "B01001_009E",
-                                  "B01001_010E",
-                                  "B01001_011E",
-                                  "B01001_012E",
-                                  "B01001_013E",
-                                  "B01001_014E",
-                                  "B01001_015E",
-                                  "B01001_016E",
-                                  "B01001_017E",
-                                  "B01001_018E",
-                                  "B01001_019E",
-                                  "B01001_020E",
-                                  "B01001_021E",
-                                  "B01001_022E",
-                                  "B01001_023E",
-                                  "B01001_024E",
-                                  "B01001_025E",
-                                  "B01001_026E",
-                                  "B01001_027E",
-                                  "B01001_028E",
-                                  "B01001_029E",
-                                  "B01001_030E",
-                                  "B01001_031E",
-                                  "B01001_032E",
-                                  "B01001_033E",
-                                  "B01001_034E",
-                                  "B01001_035E",
-                                  "B01001_036E",
-                                  "B01001_037E",
-                                  "B01001_038E",
-                                  "B01001_039E",
-                                  "B01001_040E",
-                                  "B01001_041E",
-                                  "B01001_042E",
-                                  "B01001_043E",
-                                  "B01001_044E",
-                                  "B01001_045E",
-                                  "B01001_046E",
-                                  "B01001_047E",
-                                  "B01001_048E",
-                                  "B01001_049E"
-                                 ])
-GenderAgeRaw = GenderAgeRaw.rename(columns={
-                                  "B01001_001E":"Total",
-                                  "B01001_002E":"Total Male",
-                                  "B01001_003E":"Male [00-04]",
-                                  "B01001_004E":"Male [05-09]",
-                                  "B01001_005E":"Male [10-14]",
-                                  "B01001_006E":"Male [15-17]",
-                                  "B01001_007E":"Male [18-19]",
-                                  "B01001_008E":"Male [20-20]",
-                                  "B01001_009E":"Male [21-21]",
-                                  "B01001_010E":"Male [22-24]",
-                                  "B01001_011E":"Male [25-29]",
-                                  "B01001_012E":"Male [30-34]",
-                                  "B01001_013E":"Male [35-39]",
-                                  "B01001_014E":"Male [40-44]",
-                                  "B01001_015E":"Male [45-49]",
-                                  "B01001_016E":"Male [50-54]",
-                                  "B01001_017E":"Male [55-59]",
-                                  "B01001_018E":"Male [60-61]",
-                                  "B01001_019E":"Male [62-64]",
-                                  "B01001_020E":"Male [65-66]",
-                                  "B01001_021E":"Male [67-69]",
-                                  "B01001_022E":"Male [70-74]",
-                                  "B01001_023E":"Male [75-79]",
-                                  "B01001_024E":"Male [80-84]",
-                                  "B01001_025E":"Male [85-99]",
-                                  "B01001_026E":"Total Female",
-                                  "B01001_027E":"Female [00-04]",
-                                  "B01001_028E":"Female [05-09]",
-                                  "B01001_029E":"Female [10-14]",
-                                  "B01001_030E":"Female [15-17]",
-                                  "B01001_031E":"Female [18-19]",
-                                  "B01001_032E":"Female [20-20]",
-                                  "B01001_033E":"Female [21-21]",
-                                  "B01001_034E":"Female [22-24]",
-                                  "B01001_035E":"Female [25-29]",
-                                  "B01001_036E":"Female [30-34]",
-                                  "B01001_037E":"Female [35-39]",
-                                  "B01001_038E":"Female [40-44]",
-                                  "B01001_039E":"Female [45-49]",
-                                  "B01001_040E":"Female [50-54]",
-                                  "B01001_041E":"Female [55-59]",
-                                  "B01001_042E":"Female [60-61]",
-                                  "B01001_043E":"Female [62-64]",
-                                  "B01001_044E":"Female [65-66]",
-                                  "B01001_045E":"Female [67-69]",
-                                  "B01001_046E":"Female [70-74]",
-                                  "B01001_047E":"Female [75-79]",
-                                  "B01001_048E":"Female [80-84]",
-                                  "B01001_049E":"Female [85-99]"
      
-                            })
-
-    
-# gather households
-    
-    
-houseHolds = censusdata.download('acs1', 2018, censusdata.censusgeo([('state',str(state_id)),('county', str(county_id))]),
-                           ['B11016_001E',
-                            'B11016_002E',
-                            'B11016_003E',
-                            'B11016_004E',
-                            'B11016_005E',
-                            'B11016_006E',
-                            'B11016_007E',
-                            'B11016_008E',
-                            'B11016_009E',
-                            'B11016_010E',
-                            'B11016_011E',
-                            'B11016_012E',
-                            'B11016_013E',
-                            'B11016_014E',
-                            'B11016_015E',
-                            'B11016_016E',
-                            'B09002_001E',
-                            'B09002_002E',
-                            'B09002_008E'
-                            ])
-
-houseHolds = houseHolds.rename(columns={'B11016_001E': "Total Housholds",
-                            'B11016_002E': "Total Family Households",
-                            'B11016_003E': "2 p Family Households",
-                            'B11016_004E': "3 p Family Households",
-                            'B11016_005E': "4 p Family Households",
-                            'B11016_006E': "5 p Family Households",
-                            'B11016_007E': "6 p Family Households",
-                            'B11016_008E': "7+ p Family Households",
-                            'B11016_009E': "Total Non-Family Households",
-                            'B11016_010E': "1 p Non-Family Households",
-                            'B11016_011E': "2 p Non-Family Households",
-                            'B11016_012E': "3 p Non-Family Households",
-                            'B11016_013E': "4 p Non-Family Households",
-                            'B11016_014E': "5 p Non-Family Households",
-                            'B11016_015E': "6 p Non-Family Households",
-                            'B11016_016E': "7+ p Non-Family Households",
-                            'B09002_001E': "Household w/ Children",
-                            'B09002_002E': "Married Couple w/ Children",
-                            'B09002_008E': 'Single Parent w/ Children'
-                                        
-                            })
-
-
-
-# getting businesses
-    
-
-
-# business size lookup dict (size range)
-business_sizes = {'210' : (1, 4),
-                  '220' : (5, 9),
-                  '230' : (10, 19),
-                  '241' : (20, 49),
-                  '242' : (50, 99),
-                  '251' : (100, 249),
-                  '252' : (250, 499),
-                  '254' : (500, 999),
-                  '260' : (1000,2000),
-                  }
-
-# go through and construct the list of businesses 
-
-new_locations = []
-counter = 0
-curr_type = ''
-for i, row in df.iterrows():
-    if row['EMPSZES'] == '001':
-        # skip aggregated categories
-        continue
-    else:
-        if curr_type != row['NAICS2017_LABEL']:
-            curr_type = row['NAICS2017_LABEL']
-            counter = 0
-        # make one location per ESTAB
-        for j in range(int(row['ESTAB'])):
-            new_loc = Location(row['NAICS2017_LABEL'] + '_' + str(counter), 
-                               row['NAICS2017_LABEL'], 
-                               [k for k in range(24)], 
-                               100, 
-                               random.randint(business_sizes[row['EMPSZES']][0], business_sizes[row['EMPSZES']][1]))
-            new_locations.append(new_loc)
-            counter += 1 
-            
-
-
-df['EMP'].astype(int).sum()
-
-# so we will limit ourselves to where INDLEVEL is 2.
-df.to_csv('Boulder-Businesses.csv')
-
-# school scratching
-
-# read in colorado schools
-
-schools = pd.read_csv('COLORADO-SCHOOLS.csv')
-
-
-schools_all = pd.read_csv('ccd_SCH_052_1819_l_1a_091019.csv', encoding='cp1252') #, nrows=1000)
-
-schools_sum = pd.read_csv('ccd_SCH_052_1819_l_1a_091019.csv', encoding='cp1252', nrows=1000)
-
-
-# Aggregate by school to get the student count per school
-schools_sum.groupby("ST_SCHID").STUDENT_COUNT.sum()
-test = schools_all.aggregate()
-
-schools2 = pd.read_csv('ccd_SCH_052_1819_l_1a_091019.csv', encoding='cp1252', nrows=10000) #, nrows=1000)
-
-
-
-
-
-
-# agent work
-
-#homes = pd.read_csv('houseHolds.csv')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# census scratching
-
-import cenpy
-from cenpy import products
-import matplotlib.pyplot as plt
-%matplotlib inline
-acs = cenpy.products.ACS()
-acs.from_place('Boulder County, CO')
-
-
-
-chicago = products.ACS(2018).from_place('CO', level='block',
-                                        variables=['A*', 'B01001_003E'])
-
-f, ax = plt.subplots(1,1,figsize=(20,20))
-chicago.dropna(subset=['B00002_001E'], axis=0).plot('B00002_001E', ax=ax, cmap='plasma')
-ax.set_facecolor('k')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-import pandas as pd
-import censusdata
-pd.set_option('display.expand_frame_repr', False)
-pd.set_option('display.precision', 2)
-
-
-
-censusdata.search('acs5', 2015, 'label', 'unemploy')[160:170]    
-
-
-censusdata.printtable(censusdata.censustable('acs5', 2015, 'B23025'))    
-
-
-censusdata.geographies(censusdata.censusgeo([('state', '*')]), 'acs5', 2015)    
-    
-    
-    
-    
-    
-    
-    
-    
-censusdata.geographies(censusdata.censusgeo([('state', '08'), ('county', '013')]), 'acs5', 2015)
-    
-    
-    
-censusdata.geographies(censusdata.censusgeo([('state', '08'), ('county', '013')]), 'acs5', 2018)
-    
-    
-boulder = censusdata.censusgeo([('state', '08'), ('county', '013')])
-    
-    
-
-cookbg = censusdata.download('acs5', 2015, boulder, ['B00002_001E'])
-cookbg    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
     
     

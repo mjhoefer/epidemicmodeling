@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
 import pandas as pd
 import censusdata
 import numpy as np
@@ -14,15 +11,12 @@ import matplotlib.pyplot as plt
 
 # ### For target county find state and county codes to access data in US census
 
-# In[2]:
 
 def generate_households(county_id, state_id, debug= False):
 
     
     # ### Retrieve age distribution of population
-    
-    # In[3]:
-    
+
     
     GenderAgeRaw = censusdata.download('acs5', 2018, censusdata.censusgeo([('state',str(state_id)),('county', str(county_id))]),
                                      ["B01001_001E",
@@ -129,29 +123,6 @@ def generate_households(county_id, state_id, debug= False):
                                 })
     
     
-    arr = GenderAgeRaw.to_numpy()[0]
-    male = arr[2:25]
-    female = arr[26:49]
-    label = list(GenderAgeRaw.columns.values.tolist())[2:25] 
-    for i in range(len(label)):
-        label[i] = label[i].split()[1]
-    
-    fig = plt.figure(figsize=(10,8))
-    ax = fig.add_axes([0,0,1,1])
-    X = np.arange(23)
-    ax.bar(X, male, color = 'b', width = 0.40)
-    ax.bar(X, female, color = 'r', width = 0.40,  bottom = male)
-    plt.title("Age/Gender Distribution")
-    plt.xlabel("# People in Age Group")
-    plt.ylabel("# People")
-    ax.legend(labels=["Male", "Female"])
-    
-    
-    # locs, labels = plt.xticks()            # Get locations and labels
-    # plt.xticks(locs,[label])
-    
-    plt.show()
-    GenderAgeRaw.head()
     
     
     # ### Normalize age distribution to 5 year increments and aggregate gender
@@ -179,11 +150,7 @@ def generate_households(county_id, state_id, debug= False):
     AgeDist["75-79"] = GenderAgeRaw["Male [75-79]"] + GenderAgeRaw["Female [75-79]"]
     AgeDist["80-84"] = GenderAgeRaw["Male [80-84]"] + GenderAgeRaw["Female [80-84]"]
     AgeDist["85-99"] = GenderAgeRaw["Male [85-99]"] + GenderAgeRaw["Female [85-99]"]
-    
-    AgeDist.head()
-    
-    
-    
+
     
     # ### Retrieve household distribution data
     
@@ -236,49 +203,14 @@ def generate_households(county_id, state_id, debug= False):
     
     houseHolds.head()
     
-    
-    # In[ ]:
-    
-    
-    
-    
-    
-    # In[7]:
-    
+ 
+  
     
     houseHolds["2 p Family Households"].values[0]
     singleVmarried = [houseHolds["Married Couple w/ Children"].values[0],houseHolds["Single Parent w/ Children"].values[0]]/houseHolds["Household w/ Children"].values[0]
     childrenVnone = []
     
-    
-    # In[8]:
-    
-    
-    arr = houseHolds.to_numpy()[0]
-    family = np.append([0], arr[2:8])
-    non_family = arr[9:16]
-    print(non_family)
-    #display distribution
-    fig = plt.figure()
-    ax = fig.add_axes([0,0,1,1])
-    X = np.arange(7)+1
-    ax.bar(X + 0.00, family*X, color = 'r', width = 0.25)
-    ax.bar(X + 0.25, non_family*X, color = 'b', width = 0.25)
-    plt.title("Household Distribution")
-    plt.xlabel("# People in Household")
-    plt.ylabel("# People")
-    ax.legend(labels=["Family Households", "Non-family Households"])
-    plt.show()
-    
-    
-    # In[9]:
-    
-    
-    sum(family*X+non_family*X) #Based on household this is total population
-    
-    
-    # In[10]:
-    
+ 
     
     birthDist = censusdata.download('acs5', 2018, censusdata.censusgeo([('state',str(state_id)),('county', str(county_id))]),
                                      [
@@ -319,42 +251,6 @@ def generate_households(county_id, state_id, debug= False):
                                          'B13016_016E': 'Women no birth [40-44]',
                                          'B13016_017E': 'Women no birth [45-50]'                                      
                                 })
-    birthDist.head()
-    
-    
-    # In[11]:
-    
-    
-    birthDist.columns.values.tolist()[2:9]
-    
-    
-    # In[ ]:
-    
-    
-    
-    
-    
-    # In[12]:
-    
-    
-    arr = birthDist.to_numpy()[0]
-    womenbirth = arr[2:8]
-    womennobirth = arr[10:16]
-    
-    fig = plt.figure(figsize=(10,8))
-    ax = fig.add_axes([0,0,1,1])
-    X = np.arange(6)
-    ax.bar(X, womenbirth , color = 'r', width = 0.40)
-    ax.bar(X, womennobirth, color = 'b', width = 0.40,  bottom = womenbirth)
-    plt.title("Age/Gender Distribution")
-    plt.xlabel("# People in Age Group")
-    plt.ylabel("# People")
-    ax.legend(labels=["Women who gave birth", "Women who did not give birth"])
-    
-    plt.show()
-    
-    
-    # In[13]:
     
     
     schoolDist = censusdata.download('acs5', 2018, censusdata.censusgeo([('state',str(state_id)),('county', str(county_id))]),
@@ -384,82 +280,22 @@ def generate_households(county_id, state_id, debug= False):
                                 })
     schoolDist.head()
     
-    
-    # In[14]:
-    
-    
-    # marrigeDist = censusdata.download('acs1', 2018, censusdata.censusgeo([('state',str(state_id)),('county', str(county_id))]),
-    #                                  [
-    #                                      'B12007_001E',
-    #                                      'B12007_002E'
-    #                                  ])
-    # marrigeDist = marrigeDist.rename(columns={
-    #                                      'B12007_001E': 'Median age 1st marrige Male',
-    #                                      'B12007_002E': 'Median age 1st marrige Female'                                      
-    #                             })
-    # marrigeDist.head()
-    
-    
-    # In[15]:
-    
+
     
     # https://en.wikipedia.org/wiki/Age_disparity_in_sexual_relationships
     
     
-    # ## 0. Generate list I of all individuals based on age
-    
-    # In[16]:
-    
-    
-    Individuals = np.zeros(100)
-    for rang in AgeDist.columns.values.tolist()[1:]:
-        rangePop = AgeDist[rang].values[0]
-        lower = int(rang[0:2])
-        upper = int(rang[3:])
-        for i in range(AgeDist[rang].values[0]):
-            Individuals[(np.random.randint(lower,upper+1))] += 1
-    
-    fig = plt.figure(figsize=(10,8))
-    ax = fig.add_axes([0,0,1,1])
-    ax.bar(list(range(0,100)), Individuals, color = 'r', width = 0.40);
-    
-    
-    # In[17]:
-    
-    
-    ChildParentGapDist = np.zeros(100)
-    
-    for rang in birthDist.columns.values.tolist()[2:9]:
-        rangePop = birthDist[rang].values[0]
-        lower = int(rang[-6:-4])
-        upper = int(rang[-3:-1])
-        for i in range(birthDist[rang].values[0]):
-            ChildParentGapDist[(np.random.randint(lower,upper+1))] += 1
-            
-    ChildParentGapDist = (ChildParentGapDist)/birthDist['Total Women had birth [15-50]'].values[0]
-    
-    fig = plt.figure(figsize=(10,8))
-    ax = fig.add_axes([0,0,1,1])
-    ax.bar(list(range(0,100)), ChildParentGapDist, color = 'r', width = 0.40);
-    
-    
-    # In[18]:
-    
+
     
     familyVnonfamily =  [houseHolds["Total Family Households"].values[0] ,houseHolds["Total Non-Family Households"].values[0]]/houseHolds["Total Housholds"].values[0]
     singleVmarried
     
-    
-    # In[19]:
     
     
     familyHouseholdProd = [0,0,houseHolds["2 p Family Households"].values[0],houseHolds["3 p Family Households"].values[0],houseHolds["4 p Family Households"].values[0],houseHolds["5 p Family Households"].values[0],houseHolds["6 p Family Households"].values[0],houseHolds["7+ p Family Households"].values[0]]/houseHolds["Total Family Households"].values[0]
     nonfamilyHouseholdProd = [0,houseHolds["1 p Non-Family Households"].values[0],houseHolds["2 p Non-Family Households"].values[0],houseHolds["3 p Non-Family Households"].values[0],houseHolds["4 p Non-Family Households"].values[0],houseHolds["5 p Non-Family Households"].values[0],houseHolds["6 p Non-Family Households"].values[0],houseHolds["7+ p Non-Family Households"].values[0]]/houseHolds["Total Non-Family Households"].values[0]
     familyVnonfamily =  [houseHolds["Total Family Households"].values[0] ,houseHolds["Total Non-Family Households"].values[0]]/houseHolds["Total Housholds"].values[0]
     singleVmarried = [houseHolds["Married Couple w/ Children"].values[0],houseHolds["Single Parent w/ Children"].values[0]]/houseHolds["Household w/ Children"].values[0]
-    
-    
-    # In[20]:
     
     
     class Household:
@@ -475,21 +311,7 @@ def generate_households(county_id, state_id, debug= False):
             self.ID = ID
             self.age = age
             self.hhID = hhID
-    #         self.eID = eID
-            
-            
-    class Business:
-        def __init__(self, ID, size, sector, public, occupancy):  
-            self.ID = ID
-            self.size = size
-            self.sector = sector
-            self.public = public
-            self.occupancy = occupancy
-        
-    
-    
-    # In[34]:
-    
+
     
     agents = pd.DataFrame({"ID":[],"age":[],"hhID":[]})
     households = pd.DataFrame({"ID":[],"size":[],"family":[]})
@@ -558,7 +380,7 @@ def generate_households(county_id, state_id, debug= False):
             for i in range(householdSize-1):
                 age = np.random.choice(list(range(len(IndvTemp[18:]))), p = IndvTemp[18:]/sum(IndvTemp[18:]))
     
-                if IndvTemp[age] < 1:
+                if age > 99 or IndvTemp[age] < 1:
                     counter += 1
                     if debug:
                         print("Unable to generate household",counter,"\n trying again")
@@ -575,7 +397,7 @@ def generate_households(county_id, state_id, debug= False):
         else:
             head = Agent(iID, hhID, np.random.choice(list(range(len(IndvTemp[18:]))), p = IndvTemp[18:]/sum(IndvTemp[18:])))
             
-            if IndvTemp[head.age] < 1:
+            if IndvTemp[head.age] > 99 or IndvTemp[age] < 1:
                 if debug:
                     print("Unable to generate household",counter,"\n trying again")
                 counter += 1
@@ -593,7 +415,7 @@ def generate_households(county_id, state_id, debug= False):
                 
                 attempts = 0
                 
-                if age <= 99 and IndvTemp[age] < 1:
+                if age > 99 or IndvTemp[age] < 1:
                     counter += 1
                     if debug:
                         print("Unable to generate household",counter,"\n trying again")
@@ -607,7 +429,7 @@ def generate_households(county_id, state_id, debug= False):
             if IndvTemp[age] < 1:
                 continue
         
-        if sum(IndvTemp<0)== 0:
+        if sum(IndvTemp < 0) == 0:
             counter = 0
             hhID += 1
             households = households.append({"ID" : household.ID,"size": household.size, "family": household.family} , ignore_index=True)
@@ -616,17 +438,9 @@ def generate_households(county_id, state_id, debug= False):
             Individuals = IndvTemp.copy()
     
     
-    # In[32]:
     
-    
-    households["size"].sum()
-    
-    
-    # In[28]:
-    
-    
-    households.to_csv('households.csv', encoding='utf-8')
-    agents.to_csv('agents.csv', encoding='utf-8')
+    households.to_csv('households_'+county_id+'_'+state_id+'.csv', encoding='utf-8')
+    agents.to_csv('agents_'+county_id+'_'+state_id+'.csv', encoding='utf-8')
     
     return agents
     
