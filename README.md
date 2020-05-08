@@ -1,4 +1,4 @@
-# epidemicmodeling
+# Toward a Multi-Level Simulation Approach to Modeling Epidemics in Localities
 
 This repository includes code for the paper titled "Toward a Multi-Level Simulation Approach to Modeling Epidemics in Localities."
 
