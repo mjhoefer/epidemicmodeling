@@ -517,15 +517,23 @@ county_id, state_id = get_county_and_state_id(county, state)
 
 # CREATE BUSINESSES
 
-# aggregated frame
-bus_agg_df = pull_business_data(county_id, state_id)
+# check if already ran before
+try: 
+    bus_locs_df = pd.read_csv("businesses_" + county_id + '_' + state_id + ".csv")
+    
+except:
+    # no found - pull from census
+    # aggregated frame
+    bus_agg_df = pull_business_data(county_id, state_id)
+    
+    # make synthetic frame
+    bus_locs_df = create_business_df(bus_agg_df)
 
-# make synthetic frame
-bus_locs_df = create_business_df(bus_agg_df)
 
 # save synthetic businesses for simulation repeatability
-bus_locs_df.to_csv("synthetic_business_locations.csv")
+bus_locs_df.to_csv("businesses_" + county_id + '_' + state_id + ".csv")
 
+# construct simulation objects from here
 bus_locs = create_business_objects(bus_locs_df)
 
 
@@ -550,28 +558,33 @@ except:
 agents, households = build_agent_objects(raw_agents)
 
 
+# PARAMETERS 
+working_age = 18
+retirement_age = 70
+initial_infected = 10
 
-workers, non_workers = get_number_of_workers(agents, working_age = 18)
+workers, non_workers = get_number_of_workers(agents, working_age = working_age)
 
 
 # assign agents to businesses
-assign_agents_to_bus(agents, bus_locs, 18, 70)
+assign_agents_to_bus(agents, bus_locs, working_age, retirement_age)
 
 
+# put businesses and locations in the same list - infection can happen anywhere)
 locations = bus_locs + households
 
 # READY TO RUN SIM!
 
 
-# randomly infect one person
+
 total_infected = 0
 total_unexposed = len(agents)
 total_recovered = 0
 print("Initializing Variables")
 
 
-initial_infected = 10
 
+# randomly infect 
 for i in range (initial_infected):
     agent =  random.choice(agents)
     agent.is_infected = True
